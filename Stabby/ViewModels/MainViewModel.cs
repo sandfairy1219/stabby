@@ -1,0 +1,254 @@
+using Stabby.Models;
+using Stabby.Services;
+using Stabby.Views;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using Windows.Graphics.Capture;
+
+namespace Stabby.ViewModels;
+
+public class MainViewModel : ViewModelBase
+{
+    private readonly AudioSessionService _audioSessionService;
+    private readonly RecordingService _recordingService;
+    private readonly CaptureService _captureService;
+    private readonly SettingsService _settingsService;
+    private readonly DispatcherTimer _refreshTimer;
+    private bool _isRecording;
+    private bool _isPaused;
+    private string _statusMessage = "Ready";
+    private ImageSource? _previewImage;
+    private double _previewWidth = 640;
+    private double _previewHeight = 360;
+    private double _previewContainerWidth = 640;
+    private double _previewContainerHeight = 360;
+    private string _captureSourceName = "선택 안 됨";
+
+    public ObservableCollection<AudioSessionViewModel> AudioSessions { get; } = new();
+
+    public ICommand StartRecordingCommand { get; }
+    public ICommand StopRecordingCommand { get; }
+    public ICommand PauseCommand { get; }
+    public ICommand SettingsCommand { get; }
+
+    public ImageSource? PreviewImage
+    {
+        get => _previewImage;
+        private set => SetProperty(ref _previewImage, value);
+    }
+
+    public double PreviewWidth
+    {
+        get => _previewWidth;
+        private set => SetProperty(ref _previewWidth, value);
+    }
+
+    public double PreviewHeight
+    {
+        get => _previewHeight;
+        private set => SetProperty(ref _previewHeight, value);
+    }
+
+    public double PreviewContainerWidth
+    {
+        get => _previewContainerWidth;
+        private set => SetProperty(ref _previewContainerWidth, value);
+    }
+
+    public double PreviewContainerHeight
+    {
+        get => _previewContainerHeight;
+        private set => SetProperty(ref _previewContainerHeight, value);
+    }
+
+    public string CaptureSourceName
+    {
+        get => _captureSourceName;
+        private set => SetProperty(ref _captureSourceName, value);
+    }
+
+    public bool IsRecording
+    {
+        get => _isRecording;
+        private set
+        {
+            if (SetProperty(ref _isRecording, value))
+            {
+                CommandManager.InvalidateRequerySuggested();
+                OnPropertyChanged(nameof(PauseButtonText));
+            }
+        }
+    }
+
+    public bool IsPaused
+    {
+        get => _isPaused;
+        private set
+        {
+            if (SetProperty(ref _isPaused, value))
+            {
+                OnPropertyChanged(nameof(PauseButtonText));
+            }
+        }
+    }
+
+    public string PauseButtonText => IsPaused ? "Resume" : "Pause";
+
+    public string StatusMessage
+    {
+        get => _statusMessage;
+        private set => SetProperty(ref _statusMessage, value);
+    }
+
+    public MainViewModel()
+    {
+        _audioSessionService = new AudioSessionService();
+        _recordingService = new RecordingService();
+        _captureService = new CaptureService();
+        _settingsService = new SettingsService();
+        _captureService.FrameReady += OnFrameReady;
+
+        StartRecordingCommand = new RelayCommand(
+            () => _ = StartRecordingAsync(),
+            () => !IsRecording);
+
+        StopRecordingCommand = new RelayCommand(
+            () => _ = StopRecordingAsync(),
+            () => IsRecording);
+
+        PauseCommand = new RelayCommand(
+            TogglePause,
+            () => IsRecording);
+
+        SettingsCommand = new RelayCommand(OpenSettings);
+
+        _refreshTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _refreshTimer.Tick += (s, e) => RefreshAudioSessions();
+        _refreshTimer.Start();
+
+        RefreshAudioSessions();
+    }
+
+    private void OnFrameReady(object? sender, CapturedFrame frame)
+    {
+        _recordingService.WriteFrame(frame);
+
+        Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            var wb = new WriteableBitmap(frame.Width, frame.Height, 96, 96, PixelFormats.Bgra32, null);
+            wb.Lock();
+            Marshal.Copy(frame.Data, 0, wb.BackBuffer, frame.Data.Length);
+            wb.AddDirtyRect(new System.Windows.Int32Rect(0, 0, frame.Width, frame.Height));
+            wb.Unlock();
+            wb.Freeze();
+
+            PreviewImage = wb;
+            PreviewWidth = frame.Width;
+            PreviewHeight = frame.Height;
+            UpdatePreviewContainerHeight();
+        });
+    }
+
+    public void SetCaptureSource(GraphicsCaptureItem item)
+    {
+        _captureService.StartCapture(item);
+        CaptureSourceName = item.DisplayName;
+        StatusMessage = $"Source: {item.DisplayName}";
+    }
+
+    private void TogglePause()
+    {
+        if (!IsRecording) return;
+
+        if (IsPaused)
+        {
+            _recordingService.Resume();
+            IsPaused = false;
+            StatusMessage = "Recording (Resumed)";
+        }
+        else
+        {
+            _recordingService.Pause();
+            IsPaused = true;
+            StatusMessage = "Recording (Paused)";
+        }
+    }
+
+    private void OpenSettings()
+    {
+        var window = new SettingsWindow();
+        window.DataContext = new SettingsViewModel(_settingsService, window);
+        window.Owner = Application.Current.MainWindow;
+        window.ShowDialog();
+    }
+
+    public void UpdatePreviewContainerSize(double width)
+    {
+        PreviewContainerWidth = width;
+        UpdatePreviewContainerHeight();
+    }
+
+    private void UpdatePreviewContainerHeight()
+    {
+        if (PreviewWidth > 0)
+        {
+            var ratio = PreviewHeight / PreviewWidth;
+            PreviewContainerHeight = PreviewContainerWidth * ratio;
+        }
+    }
+
+    private async Task StartRecordingAsync()
+    {
+        var outputDir = _settingsService.Settings.OutputDirectory;
+        Directory.CreateDirectory(outputDir);
+        var fileName = $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mp4";
+        var outputPath = Path.Combine(outputDir, fileName);
+
+        var selectedSessions = AudioSessions.Where(s => s.IsSelected).ToList();
+        _recordingService.StartRecording(outputPath, _captureService, _settingsService.Settings, selectedSessions);
+        IsRecording = true;
+        IsPaused = false;
+        StatusMessage = $"Recording: {fileName}" + (selectedSessions.Count > 0 ? $" ({selectedSessions.Count} audio sources)" : " (system audio)");
+    }
+
+    private async Task StopRecordingAsync()
+    {
+        StatusMessage = "Finalizing...";
+        await _recordingService.StopRecordingAsync();
+        IsRecording = false;
+        IsPaused = false;
+        StatusMessage = "Saved";
+    }
+
+    private void RefreshAudioSessions()
+    {
+        var sessions = _audioSessionService.GetAudioSessions();
+
+        for (int i = AudioSessions.Count - 1; i >= 0; i--)
+        {
+            var existing = AudioSessions[i];
+            if (!sessions.Any(s => s.ProcessId == existing.ProcessId))
+            {
+                AudioSessions.RemoveAt(i);
+            }
+        }
+
+        foreach (var session in sessions)
+        {
+            var existing = AudioSessions.FirstOrDefault(s => s.ProcessId == session.ProcessId);
+            if (existing == null)
+            {
+                AudioSessions.Add(new AudioSessionViewModel(session));
+            }
+        }
+    }
+}

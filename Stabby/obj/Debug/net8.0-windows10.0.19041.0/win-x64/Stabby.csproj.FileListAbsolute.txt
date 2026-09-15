@@ -1,0 +1,8 @@
+D:\workspace\stabby\Stabby\obj\Debug\net8.0-windows10.0.19041.0\win-x64\Stabby.csproj.AssemblyReference.cache
+D:\workspace\stabby\Stabby\obj\Debug\net8.0-windows10.0.19041.0\win-x64\Views\AudioMixerPanel.baml
+D:\workspace\stabby\Stabby\obj\Debug\net8.0-windows10.0.19041.0\win-x64\MainWindow.g.cs
+D:\workspace\stabby\Stabby\obj\Debug\net8.0-windows10.0.19041.0\win-x64\Views\AudioMixerPanel.g.cs
+D:\workspace\stabby\Stabby\obj\Debug\net8.0-windows10.0.19041.0\win-x64\App.g.cs
+D:\workspace\stabby\Stabby\obj\Debug\net8.0-windows10.0.19041.0\win-x64\GeneratedInternalTypeHelper.g.cs
+D:\workspace\stabby\Stabby\obj\Debug\net8.0-windows10.0.19041.0\win-x64\Stabby_MarkupCompile.cache
+D:\workspace\stabby\Stabby\obj\Debug\net8.0-windows10.0.19041.0\win-x64\Stabby_MarkupCompile.lref
