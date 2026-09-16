@@ -76,7 +76,7 @@ Recordings are saved to the configured output directory (default: `D:\videos`).
 | UI | C# + WPF (.NET 8) |
 | Screen Capture | Windows.Graphics.Capture + DirectX |
 | Per-App Audio | WASAPI Process Loopback API |
-| Audio Bridge | ProcessAudioCapture DLL (MIT) |
+| Audio Bridge | `ProcessAudioCapture.dll` (MIT) — to be replaced by `Stabby.AudioCapture` (in development) |
 | Encoding | FFmpeg (rawvideo → H.264/AAC) |
 | Packaging | .NET self-contained single file + Inno Setup *(planned)* |
 
@@ -119,6 +119,7 @@ Recordings are saved to the configured output directory (default: `D:\videos`).
 - [x] Live preview
 - [x] Settings window
 - [x] Pause/Resume (basic)
+- [ ] Replace `ProcessAudioCapture.dll` with self-built `Stabby.AudioCapture` C++ DLL
 - [ ] Proper pause with timeline skipping
 - [ ] Multi-track audio recording (MKV)
 - [ ] Hardware-accelerated encoding (NVENC/AMF/QuickSync)

@@ -14,9 +14,9 @@ A lightweight, native Windows screen recorder focused on **per-application audio
 | Area | Choice | Reason |
 |------|--------|--------|
 | UI | **C# + WPF (.NET 8)** | Native Windows UI, fast development |
-| Screen Capture | **FFmpeg gdigrab** | Simple, no WinRT/DirectX complexity |
+| Screen Capture | **Windows.Graphics.Capture + DirectX** | High-quality preview and recording |
 | Per-App Audio Capture | **WASAPI Process Loopback API** (`AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK`) | Official Windows 10 2004+ API, captures specific process audio |
-| Audio Capture Bridge | **C++ DLL (`Stabby.AudioCapture`)** | Wraps COM/WASAPI loopback API for C# P/Invoke |
+| Audio Capture Bridge | **C++ DLL (`Stabby.AudioCapture`)** | Wraps COM/WASAPI loopback API for C# P/Invoke. Replaces third-party dependency. |
 | Audio Encoding/Muxing | **FFmpeg** | Mix multiple WAV tracks + video into MP4 |
 | Deployment | **.NET 8 Self-Contained Single File + Inno Setup** | No .NET runtime required |
 
@@ -26,31 +26,40 @@ A lightweight, native Windows screen recorder focused on **per-application audio
 
 ```
 Stabby/
-├── Stabby.sln
+├── Stabby.slnx
 ├── Stabby/                           # WPF Application
 │   ├── App.xaml
 │   ├── MainWindow.xaml
 │   ├── Views/
-│   │   └── AudioMixerPanel.xaml
+│   │   ├── AudioMixerPanel.xaml
+│   │   └── SettingsWindow.xaml
 │   ├── ViewModels/
 │   │   ├── ViewModelBase.cs
 │   │   ├── RelayCommand.cs
 │   │   ├── AudioSessionViewModel.cs
+│   │   ├── SettingsViewModel.cs
 │   │   └── MainViewModel.cs
 │   ├── Models/
-│   │   └── AudioSessionInfo.cs
+│   │   ├── AudioSessionInfo.cs
+│   │   └── Settings.cs
 │   ├── Services/
 │   │   ├── AudioSessionService.cs    # List running audio sessions
 │   │   ├── AudioCaptureNative.cs     # P/Invoke to C++ DLL
-│   │   └── RecordingService.cs       # Orchestrate video + audio capture + mux
+│   │   ├── CaptureService.cs         # Windows.Graphics.Capture wrapper
+│   │   ├── Direct3DDeviceHelper.cs   # Direct3D device creation for WinRT
+│   │   ├── RecordingService.cs       # Orchestrate video + audio capture + mux
+│   │   └── SettingsService.cs        # JSON settings persistence
+│   ├── ProcessAudioCapture.dll       # Current audio capture DLL (legacy/third-party)
 │   └── Stabby.csproj
-├── Stabby.AudioCapture/              # C++ DLL
+├── Stabby.AudioCapture/              # C++ DLL (in development)
 │   ├── Stabby.AudioCapture.vcxproj
 │   ├── dllmain.cpp
 │   ├── LoopbackCapture.cpp
 │   ├── LoopbackCapture.h
-│   └── exports.cpp
-└── plan.md
+│   ├── exports.cpp
+│   └── README.md
+├── plan.md
+└── README.md
 ```
 
 ---
@@ -58,23 +67,35 @@ Stabby/
 ## 4. Core Features
 
 ### 4.1 Screen Recording
-- Full screen capture via FFmpeg gdigrab
-- Configurable frame rate, quality
-- Output: H.264 video in temporary MP4
+- Select capture source via Windows capture picker (window / monitor / desktop)
+- Real-time preview with original quality
+- Configurable frame rate and video quality
+- Output: H.264 video in MP4
 
 ### 4.2 Per-Application Audio Capture
 - Enumerate audio-playing processes
 - Per-process controls:
   - **Include**: capture only this app's audio
-  - **Exclude**: capture all audio except this app
   - Volume slider
   - Mute
 - Multiple included apps mixed into one audio track
+- System-wide audio capture when no app is selected
 
-### 4.3 Final Muxing
-- Combine video MP4 + per-app WAV files
+### 4.3 Settings
+- Output directory
+- Frame rate
+- Video CRF
+- Audio bitrate
+- Persisted to `%AppData%/Stabby/settings.json`
+
+### 4.4 Recording Controls
+- Record / Stop
+- Pause / Resume (basic)
+
+### 4.5 Final Muxing
+- Combine video + per-app WAV files
 - FFmpeg `amix` filter for audio mixing
-- Output: single MP4 file in `~/Videos/Stabby/`
+- Output: single MP4 file
 
 ---
 
@@ -88,36 +109,38 @@ Modes:
 
 Device ID: `VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK`
 
-The C++ DLL exposes simple C exports:
-```cpp
-extern "C" __declspec(dllexport) bool Stabby_IsSupported();
-extern "C" __declspec(dllexport) bool Stabby_StartCapture(int pid, int mode, const wchar_t* outputPath);
-extern "C" __declspec(dllexport) void Stabby_StopCapture();
-extern "C" __declspec(dllexport) bool Stabby_IsCapturing();
-```
-
 ---
 
 ## 6. Development Phases
 
-### Phase 1: C++ Audio Capture DLL
+### Phase 1: C++ Audio Capture DLL ✅ (scaffold)
 - Create `Stabby.AudioCapture` C++ DLL project
-- Implement process loopback capture
-- Export C API
+- Implement process loopback capture skeleton
+- Export C API matching `AudioCaptureNative.cs`
+- **Next**: build, test, replace `ProcessAudioCapture.dll`
 
-### Phase 2: C# Integration
+### Phase 2: Screen Capture ✅
+- Windows.Graphics.Capture integration
+- Direct3D device helper
+- Live preview
+
+### Phase 3: C# Integration ✅
 - P/Invoke wrapper
-- Replace/extend `RecordingService` to capture per-app audio
+- RecordingService with FFmpeg rawvideo pipe
+- Per-app audio capture and mixing
 
-### Phase 3: UI Update
-- Add include/exclude mode selector
-- Add per-app checkboxes in mixer panel
+### Phase 4: UI ✅
+- Capture source picker
+- Audio mixer panel
+- Settings window
+- Pause/Resume buttons
 
-### Phase 4: Testing & Polish
-- Test include/exclude recording
-- Multi-app mixing
-- Error handling
-- Single-file publish + installer
+### Phase 5: Polish & Deployment 🔄
+- Replace third-party DLL with `Stabby.AudioCapture.dll`
+- Proper pause with timeline skipping
+- Multi-track audio recording (MKV)
+- Hardware-accelerated encoding (NVENC/AMF/QuickSync)
+- Single-file publish + Inno Setup installer
 
 ---
 
@@ -126,4 +149,5 @@ extern "C" __declspec(dllexport) bool Stabby_IsCapturing();
 - Windows 10 version 2004+ required
 - Cannot capture DRM-protected audio
 - Some UWP apps may need special handling
-- Included apps are captured to separate WAV files and mixed after recording
+- Pause/Resume keeps FFmpeg running, so paused duration is included in video length
+- `Stabby.AudioCapture` DLL is not yet integrated/built
