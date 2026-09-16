@@ -1,4 +1,5 @@
 using Stabby.Models;
+using CaptureMode = Stabby.Models.CaptureMode;
 
 namespace Stabby.ViewModels;
 
@@ -7,7 +8,7 @@ public class AudioSessionViewModel : ViewModelBase
     private readonly AudioSessionInfo _info;
     private float _volume;
     private bool _isMuted;
-    private bool _isSelected;
+    private CaptureMode _captureMode;
 
     public AudioSessionViewModel(AudioSessionInfo info)
     {
@@ -23,10 +24,22 @@ public class AudioSessionViewModel : ViewModelBase
     public string DisplayName { get; }
     public string ProcessName { get; }
 
+    public CaptureMode CaptureMode
+    {
+        get => _captureMode;
+        set => SetProperty(ref _captureMode, value);
+    }
+
     public bool IsSelected
     {
-        get => _isSelected;
-        set => SetProperty(ref _isSelected, value);
+        get => _captureMode == CaptureMode.Include;
+        set
+        {
+            if (value)
+                CaptureMode = CaptureMode.Include;
+            else if (_captureMode == CaptureMode.Include)
+                CaptureMode = CaptureMode.None;
+        }
     }
 
     public float Volume

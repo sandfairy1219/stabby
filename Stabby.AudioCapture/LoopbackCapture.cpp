@@ -6,11 +6,12 @@
 #include <audioclientactivationparams.h>
 #include <mfapi.h>
 #include <wrl/implements.h>
+#include <wrl/wrappers/corewrappers.h>
 #include <cmath>
 #include <cstring>
 
 using namespace Microsoft::WRL;
-using namespace Windows::Foundation;
+using namespace Microsoft::WRL::Wrappers;
 
 namespace
 {
@@ -18,15 +19,14 @@ namespace
     const wchar_t* ProcessLoopbackDeviceId = L"VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK";
 
     class ActivateHandler :
-        public RuntimeClass<RuntimeClassFlags<ClassicCom>, FtmBase, IActivateAudioInterfaceCompletionHandler>
+        public RuntimeClass<RuntimeClassFlags<ClassicCom>, FtmBase, IAgileObject, IActivateAudioInterfaceCompletionHandler>
     {
     public:
-        explicit ActivateHandler(IActivateAudioInterfaceAsyncOperation* operation) {}
         ActivateHandler() {}
 
         STDMETHOD(ActivateCompleted)(IActivateAudioInterfaceAsyncOperation* operation)
         {
-            m_done.SetEvent();
+            SetEvent(m_done.Get());
             return S_OK;
         }
 
@@ -86,37 +86,23 @@ void LoopbackCapture::CaptureThread(DWORD processId, PacMode mode, std::wstring 
     pv.blob.cbSize = sizeof(activationParams);
     pv.blob.pBlobData = reinterpret_cast<BYTE*>(&activationParams);
 
+    ComPtr<ActivateHandler> handler = Make<ActivateHandler>();
     ComPtr<IActivateAudioInterfaceAsyncOperation> asyncOp;
-    hr = ActivateAudioInterfaceAsync(ProcessLoopbackDeviceId, __uuidof(IAudioClient), &pv, nullptr, &asyncOp);
+    hr = ActivateAudioInterfaceAsync(ProcessLoopbackDeviceId, __uuidof(IAudioClient), &pv, handler.Get(), &asyncOp);
     if (FAILED(hr))
     {
         SetError(hr, L"ActivateAudioInterfaceAsync failed");
         return;
     }
 
-    // Wait for activation completion
-    HANDLE event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    // (We rely on a completion handler class; simplified with polling for robustness.)
-    // Instead, use polling approach based on completion event:
-    ComPtr<ActivateHandler> handler = Make<ActivateHandler>();
-    ComPtr<IActivateAudioInterfaceAsyncOperation> op2;
-    hr = ActivateAudioInterfaceAsync(ProcessLoopbackDeviceId, __uuidof(IAudioClient), &pv, handler.Get(), &op2);
-    if (FAILED(hr))
-    {
-        SetError(hr, L"ActivateAudioInterfaceAsync(handler) failed");
-        CloseHandle(event);
-        return;
-    }
     WaitForSingleObject(handler->GetEvent(), INFINITE);
 
-    hr = op2->GetActivateResult(&handler->activateResult, &handler->audioInterface);
+    hr = asyncOp->GetActivateResult(&handler->activateResult, &handler->audioInterface);
     if (FAILED(hr) || FAILED(handler->activateResult) || !handler->audioInterface)
     {
         SetError(hr != S_OK ? hr : handler->activateResult, L"GetActivateResult failed");
-        CloseHandle(event);
         return;
     }
-    CloseHandle(event);
 
     ComPtr<IAudioClient> audioClient;
     hr = handler->audioInterface.As(&audioClient);

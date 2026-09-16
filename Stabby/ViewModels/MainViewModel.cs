@@ -1,7 +1,9 @@
 using Stabby.Models;
 using Stabby.Services;
+using CaptureMode = Stabby.Models.CaptureMode;
 using Stabby.Views;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -213,11 +215,19 @@ public class MainViewModel : ViewModelBase
         var fileName = $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mp4";
         var outputPath = Path.Combine(outputDir, fileName);
 
-        var selectedSessions = AudioSessions.Where(s => s.IsSelected).ToList();
-        _recordingService.StartRecording(outputPath, _captureService, _settingsService.Settings, selectedSessions);
+        var includeSessions = AudioSessions.Where(s => s.CaptureMode == CaptureMode.Include).ToList();
+        var excludeSession = AudioSessions.FirstOrDefault(s => s.CaptureMode == CaptureMode.Exclude);
+
+        _recordingService.StartRecording(outputPath, _captureService, _settingsService.Settings, includeSessions, excludeSession);
         IsRecording = true;
         IsPaused = false;
-        StatusMessage = $"Recording: {fileName}" + (selectedSessions.Count > 0 ? $" ({selectedSessions.Count} audio sources)" : " (system audio)");
+
+        var audioStatus = excludeSession != null
+            ? $" (excluding {excludeSession.DisplayName})"
+            : includeSessions.Count > 0
+                ? $" ({includeSessions.Count} audio sources)"
+                : " (system audio)";
+        StatusMessage = $"Recording: {fileName}" + audioStatus;
     }
 
     private async Task StopRecordingAsync()
@@ -247,7 +257,25 @@ public class MainViewModel : ViewModelBase
             var existing = AudioSessions.FirstOrDefault(s => s.ProcessId == session.ProcessId);
             if (existing == null)
             {
-                AudioSessions.Add(new AudioSessionViewModel(session));
+                var vm = new AudioSessionViewModel(session);
+                vm.PropertyChanged += OnAudioSessionPropertyChanged;
+                AudioSessions.Add(vm);
+            }
+        }
+    }
+
+    private void OnAudioSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AudioSessionViewModel.CaptureMode) && sender is AudioSessionViewModel vm)
+        {
+            // Exclude mode must be exclusive. When one session switches to Exclude,
+            // reset all other sessions to None.
+            if (vm.CaptureMode == CaptureMode.Exclude)
+            {
+                foreach (var other in AudioSessions.Where(s => s != vm))
+                {
+                    other.CaptureMode = CaptureMode.None;
+                }
             }
         }
     }

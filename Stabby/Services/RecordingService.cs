@@ -28,7 +28,12 @@ public class RecordingService
     public bool IsRecording => _ffmpegProcess != null && !_ffmpegProcess.HasExited;
     public bool IsPaused => _isPaused;
 
-    public void StartRecording(string outputPath, CaptureService captureService, Settings settings, IEnumerable<AudioSessionViewModel> selectedSessions)
+    public void StartRecording(
+        string outputPath,
+        CaptureService captureService,
+        Settings settings,
+        List<AudioSessionViewModel> includeSessions,
+        AudioSessionViewModel? excludeSession)
     {
         _outputPath = outputPath;
         _captureService = captureService;
@@ -41,15 +46,27 @@ public class RecordingService
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         _videoTempPath = Path.Combine(tempDir, $"stabby_video_{timestamp}.mp4");
 
-        var selectedList = selectedSessions.ToList();
-        if (selectedList.Count == 0)
+        if (excludeSession != null)
         {
-            _systemAudioTempPath = Path.Combine(tempDir, $"stabby_audio_system_{timestamp}.wav");
-            StartSystemAudioCapture(_systemAudioTempPath);
+            // Exclude mode: capture all audio EXCEPT the selected process.
+            var excludePath = Path.Combine(tempDir, $"stabby_audio_exclude_{excludeSession.ProcessId}_{timestamp}.wav");
+            var result = AudioCaptureNative.PacStartCapture(
+                (uint)excludeSession.ProcessId,
+                PacCaptureMode.Exclude,
+                excludePath,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                out var handle);
+
+            if (result == (int)PacErrorCode.Success)
+            {
+                _captureHandles.Add(handle);
+                _audioTempPaths.Add(excludePath);
+            }
         }
-        else
+        else if (includeSessions.Count > 0)
         {
-            foreach (var session in selectedList)
+            foreach (var session in includeSessions)
             {
                 var audioPath = Path.Combine(tempDir, $"stabby_audio_{session.ProcessId}_{timestamp}.wav");
                 var result = AudioCaptureNative.PacStartCapture(
@@ -66,6 +83,11 @@ public class RecordingService
                     _audioTempPaths.Add(audioPath);
                 }
             }
+        }
+        else
+        {
+            _systemAudioTempPath = Path.Combine(tempDir, $"stabby_audio_system_{timestamp}.wav");
+            StartSystemAudioCapture(_systemAudioTempPath);
         }
     }
 

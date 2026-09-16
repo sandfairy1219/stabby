@@ -20,9 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="ProcessAudioCapture.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <None Include="..\Stabby.AudioCapture\x64\Release\*.dll" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
     <Content Include="LICENSE-ProcessAudioCapture.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
