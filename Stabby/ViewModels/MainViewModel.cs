@@ -148,7 +148,9 @@ public class MainViewModel : ViewModelBase
 
     private void OnFrameReady(object? sender, CapturedFrame frame)
     {
-        _recordingService.WriteFrame(frame);
+        // Only write frames once a recording has actually started.
+        if (_recordingService.OutputPath != null)
+            _recordingService.WriteFrame(frame);
 
         var now = DateTime.UtcNow;
         if (now - _lastPreviewUpdate < _previewThrottleInterval)

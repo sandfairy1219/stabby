@@ -105,6 +105,11 @@ public class RecordingService
     public void WriteFrame(CapturedFrame frame)
     {
         if (_isPaused || _stopRequested) return;
+        if (string.IsNullOrEmpty(_videoTempPath))
+        {
+            LastError = "Recording not started: video temp path is missing.";
+            return;
+        }
 
         lock (_ffmpegLock)
         {
@@ -113,7 +118,7 @@ public class RecordingService
             {
                 try
                 {
-                    StartVideoCapture(_videoTempPath!, frame.Width, frame.Height);
+                    StartVideoCapture(_videoTempPath, frame.Width, frame.Height);
                 }
                 catch (Exception ex)
                 {
@@ -140,6 +145,9 @@ public class RecordingService
 
     private void StartVideoCapture(string outputPath, int width, int height)
     {
+        if (string.IsNullOrEmpty(outputPath))
+            throw new ArgumentException("Output path is empty.", nameof(outputPath));
+
         var videoArgs = _videoEncoder switch
         {
             VideoEncoder.H264_NVENC => $"-c:v h264_nvenc -preset p4 -cq {_videoCrf} -pix_fmt yuv420p",
