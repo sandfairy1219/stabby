@@ -110,7 +110,15 @@ public class RecordingService
             if (_stopRequested) return;
             if (_ffmpegProcess == null)
             {
-                StartVideoCapture(_videoTempPath!, frame.Width, frame.Height);
+                try
+                {
+                    StartVideoCapture(_videoTempPath!, frame.Width, frame.Height);
+                }
+                catch (Exception ex)
+                {
+                    LastError = $"Failed to start FFmpeg: {ex.Message}";
+                    return;
+                }
             }
 
             try
@@ -118,7 +126,10 @@ public class RecordingService
                 _ffmpegProcess?.StandardInput.BaseStream.Write(frame.Data);
                 FramesWritten++;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LastError = $"Failed to write frame: {ex.Message}";
+            }
         }
     }
 

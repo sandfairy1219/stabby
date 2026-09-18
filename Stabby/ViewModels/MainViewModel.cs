@@ -301,13 +301,16 @@ public class MainViewModel : ViewModelBase
 
     private void UpdateCaptureStats()
     {
-        if (IsRecording) return;
-
         var captured = _captureService.FrameCount;
         var written = _recordingService.FramesWritten;
         var captureError = _captureService.LastError;
+        var recorderError = _recordingService.LastError;
 
-        if (!string.IsNullOrEmpty(captureError))
+        if (!string.IsNullOrEmpty(recorderError))
+        {
+            StatusMessage = $"Recorder error: {recorderError}";
+        }
+        else if (!string.IsNullOrEmpty(captureError))
         {
             StatusMessage = $"Capture error: {captureError}";
         }
