@@ -219,56 +219,68 @@ public class RecordingService
 
     private void Mux()
     {
-        if (_videoTempPath == null || _outputPath == null) return;
-
-        var audioPaths = new List<string>();
-        if (!string.IsNullOrEmpty(_systemAudioTempPath) && File.Exists(_systemAudioTempPath))
-            audioPaths.Add(_systemAudioTempPath);
-        audioPaths.AddRange(_audioTempPaths.Where(File.Exists));
-
-        if (audioPaths.Count == 0)
+        try
         {
-            File.Move(_videoTempPath, _outputPath, overwrite: true);
-            return;
-        }
+            if (_videoTempPath == null || _outputPath == null) return;
 
-        var sb = new StringBuilder();
-        sb.Append($"-i \"{_videoTempPath}\" ");
-        foreach (var audioPath in audioPaths)
-        {
-            sb.Append($"-i \"{audioPath}\" ");
-        }
+            var audioPaths = new List<string>();
+            if (!string.IsNullOrEmpty(_systemAudioTempPath) && File.Exists(_systemAudioTempPath))
+                audioPaths.Add(_systemAudioTempPath);
+            audioPaths.AddRange(_audioTempPaths.Where(File.Exists));
 
-        // Build volume filters. System audio (index 0 if present) stays at 1.0.
-        // Per-app audio sessions use their recording volume from the mixer UI.
-        var filters = new List<string>();
-        int sessionIndex = !string.IsNullOrEmpty(_systemAudioTempPath) ? 1 : 0;
-        for (int i = 0; i < audioPaths.Count; i++)
-        {
-            double gain = 1.0;
-            if (i >= sessionIndex && i - sessionIndex < _audioSessions.Count)
+            if (audioPaths.Count == 0)
             {
-                var session = _audioSessions[i - sessionIndex];
-                gain = session.IsMuted ? 0.0 : session.Volume / 100.0;
+                File.Move(_videoTempPath, _outputPath, overwrite: true);
+                return;
             }
-            filters.Add($"[{i}:a]volume={gain:F2}[a{i}]");
+
+            var sb = new StringBuilder();
+            sb.Append($"-i \"{_videoTempPath}\" ");
+            foreach (var audioPath in audioPaths)
+            {
+                sb.Append($"-i \"{audioPath}\" ");
+            }
+
+            // Build volume filters. System audio (index 0 if present) stays at 1.0.
+            // Per-app audio sessions use their recording volume from the mixer UI.
+            var filters = new List<string>();
+            int sessionIndex = !string.IsNullOrEmpty(_systemAudioTempPath) ? 1 : 0;
+            for (int i = 0; i < audioPaths.Count; i++)
+            {
+                double gain = 1.0;
+                if (i >= sessionIndex && i - sessionIndex < _audioSessions.Count)
+                {
+                    var session = _audioSessions[i - sessionIndex];
+                    gain = session.IsMuted ? 0.0 : session.Volume / 100.0;
+                }
+                filters.Add($"[{i}:a]volume={gain:F2}[a{i}]");
+            }
+            var mixInputs = string.Join("", audioPaths.Select((_, i) => $"[a{i}]"));
+            filters.Add($"{mixInputs}amix=inputs={audioPaths.Count}:duration=first:dropout_transition=0[aout]");
+
+            sb.Append($"-filter_complex \"{string.Join(";", filters)}\" ");
+            sb.Append($"-map 0:v -map [aout] -c:v copy -c:a aac -b:a {_audioBitrate}k -y \"{_outputPath}\"");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "ffmpeg",
+                Arguments = sb.ToString(),
+                UseShellExecute = false,
+                RedirectStandardError = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(psi);
+            process?.WaitForExit();
+
+            if (process?.ExitCode != 0)
+            {
+                LastError = $"FFmpeg mux failed with exit code {process?.ExitCode}.";
+            }
         }
-        var mixInputs = string.Join("", audioPaths.Select((_, i) => $"[a{i}]"));
-        filters.Add($"{mixInputs}amix=inputs={audioPaths.Count}:duration=first:dropout_transition=0[aout]");
-
-        sb.Append($"-filter_complex \"{string.Join(";", filters)}\" ");
-        sb.Append($"-map 0:v -map [aout] -c:v copy -c:a aac -b:a {_audioBitrate}k -y \"{_outputPath}\"");
-
-        var psi = new ProcessStartInfo
+        catch (Exception ex)
         {
-            FileName = "ffmpeg",
-            Arguments = sb.ToString(),
-            UseShellExecute = false,
-            RedirectStandardError = false,
-            CreateNoWindow = true
-        };
-        using var process = Process.Start(psi);
-        process?.WaitForExit();
+            LastError = $"Mux failed: {ex.Message}";
+        }
     }
 
     private void Cleanup()

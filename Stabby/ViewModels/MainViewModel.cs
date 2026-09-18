@@ -247,10 +247,30 @@ public class MainViewModel : ViewModelBase
         // Stop frame capture immediately so FFmpeg can finish.
         _captureService.StopCapture();
 
-        await _recordingService.StopRecordingAsync();
+        try
+        {
+            await _recordingService.StopRecordingAsync();
+
+            if (!string.IsNullOrEmpty(outputPath) && File.Exists(outputPath))
+            {
+                StatusMessage = $"Saved: {outputPath}";
+            }
+            else if (!string.IsNullOrEmpty(_recordingService.LastError))
+            {
+                StatusMessage = $"Failed: {_recordingService.LastError}";
+            }
+            else
+            {
+                StatusMessage = $"Failed: output file not found ({fileName})";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Failed: {ex.Message}";
+        }
+
         IsRecording = false;
         IsPaused = false;
-        StatusMessage = $"Saved: {fileName}";
     }
 
     private void RefreshAudioSessions()
