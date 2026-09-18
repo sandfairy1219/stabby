@@ -11,6 +11,7 @@ public class RecordingService
 {
     private readonly List<IntPtr> _captureHandles = new();
     private readonly List<string> _audioTempPaths = new();
+    private readonly List<AudioSessionViewModel> _audioSessions = new();
     private CaptureService? _captureService;
     private Process? _ffmpegProcess;
     private WasapiLoopbackCapture? _systemAudioCapture;
@@ -46,6 +47,7 @@ public class RecordingService
         _videoEncoder = settings.VideoEncoder;
         _isPaused = false;
         _stopRequested = false;
+        _audioSessions.Clear();
 
         var tempDir = Path.GetTempPath();
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
@@ -73,6 +75,7 @@ public class RecordingService
         {
             foreach (var session in includeSessions)
             {
+                _audioSessions.Add(session);
                 var audioPath = Path.Combine(tempDir, $"stabby_audio_{session.ProcessId}_{timestamp}.wav");
                 var result = AudioCaptureNative.PacStartCapture(
                     (uint)session.ProcessId,
@@ -235,16 +238,25 @@ public class RecordingService
             sb.Append($"-i \"{audioPath}\" ");
         }
 
-        if (audioPaths.Count == 1)
+        // Build volume filters. System audio (index 0 if present) stays at 1.0.
+        // Per-app audio sessions use their recording volume from the mixer UI.
+        var filters = new List<string>();
+        int sessionIndex = !string.IsNullOrEmpty(_systemAudioTempPath) ? 1 : 0;
+        for (int i = 0; i < audioPaths.Count; i++)
         {
-            sb.Append($"-c:v copy -c:a aac -b:a {_audioBitrate}k ");
+            double gain = 1.0;
+            if (i >= sessionIndex && i - sessionIndex < _audioSessions.Count)
+            {
+                var session = _audioSessions[i - sessionIndex];
+                gain = session.IsMuted ? 0.0 : session.Volume / 100.0;
+            }
+            filters.Add($"[{i}:a]volume={gain:F2}[a{i}]");
         }
-        else
-        {
-            sb.Append($"-filter_complex \"amix=inputs={audioPaths.Count}:duration=first:dropout_transition=0\" -c:v copy -c:a aac -b:a {_audioBitrate}k ");
-        }
+        var mixInputs = string.Join("", audioPaths.Select((_, i) => $"[a{i}]"));
+        filters.Add($"{mixInputs}amix=inputs={audioPaths.Count}:duration=first:dropout_transition=0[aout]");
 
-        sb.Append($"-y \"{_outputPath}\"");
+        sb.Append($"-filter_complex \"{string.Join(";", filters)}\" ");
+        sb.Append($"-map 0:v -map [aout] -c:v copy -c:a aac -b:a {_audioBitrate}k -y \"{_outputPath}\"");
 
         var psi = new ProcessStartInfo
         {
@@ -275,6 +287,7 @@ public class RecordingService
 
         _captureHandles.Clear();
         _audioTempPaths.Clear();
+        _audioSessions.Clear();
         _videoTempPath = null;
         _systemAudioTempPath = null;
         _outputPath = null;

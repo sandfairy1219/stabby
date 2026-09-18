@@ -16,8 +16,8 @@ public class AudioSessionViewModel : ViewModelBase
         ProcessId = info.ProcessId;
         DisplayName = info.DisplayName;
         ProcessName = info.ProcessName;
-        _volume = info.Volume * 100f;
-        _isMuted = info.IsMuted;
+        _volume = 100f;
+        _isMuted = false;
     }
 
     public int ProcessId { get; }
@@ -45,26 +45,12 @@ public class AudioSessionViewModel : ViewModelBase
     public float Volume
     {
         get => _volume;
-        set
-        {
-            if (SetProperty(ref _volume, value))
-            {
-                if (_info.VolumeControl != null)
-                    _info.VolumeControl.Volume = value / 100f;
-            }
-        }
+        set => SetProperty(ref _volume, value);
     }
 
     public bool IsMuted
     {
         get => _isMuted;
-        set
-        {
-            if (SetProperty(ref _isMuted, value))
-            {
-                if (_info.VolumeControl != null)
-                    _info.VolumeControl.Mute = value;
-            }
-        }
+        set => SetProperty(ref _isMuted, value);
     }
 }
