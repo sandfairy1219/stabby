@@ -22,18 +22,28 @@ public class CaptureService : IDisposable
 
     public void StartCapture(GraphicsCaptureItem item)
     {
-        StopCapture();
-        _item = item;
-        _lastSize = item.Size;
-        _device = Direct3DDeviceHelper.CreateDevice();
-        _framePool = Direct3D11CaptureFramePool.Create(
-            _device,
-            DirectXPixelFormat.B8G8R8A8UIntNormalized,
-            2,
-            item.Size);
-        _framePool.FrameArrived += OnFrameArrived;
-        _session = _framePool.CreateCaptureSession(item);
-        _session.StartCapture();
+        try
+        {
+            StopCapture();
+            _item = item;
+            _lastSize = item.Size;
+            _device = Direct3DDeviceHelper.CreateDevice();
+            if (_device == null) throw new InvalidOperationException("Failed to create Direct3D device.");
+
+            _framePool = Direct3D11CaptureFramePool.Create(
+                _device,
+                DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                2,
+                item.Size);
+            _framePool.FrameArrived += OnFrameArrived;
+            _session = _framePool.CreateCaptureSession(item);
+            _session.StartCapture();
+        }
+        catch (Exception ex)
+        {
+            StopCapture();
+            throw new InvalidOperationException($"Capture initialization failed: {ex.Message}", ex);
+        }
     }
 
     public void StopCapture()
@@ -50,7 +60,7 @@ public class CaptureService : IDisposable
         _device = null;
     }
 
-    private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
+    private async void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
     {
         using var frame = sender.TryGetNextFrame();
         if (frame == null) return;
@@ -65,8 +75,9 @@ public class CaptureService : IDisposable
             }
         }
 
-        using var softwareBitmap = SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface).AsTask().Result;
+        var softwareBitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface).AsTask();
         using var converted = SoftwareBitmap.Convert(softwareBitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+        softwareBitmap.Dispose();
 
         var bytes = new byte[size.Width * size.Height * 4];
         converted.CopyToBuffer(bytes.AsBuffer());

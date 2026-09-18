@@ -28,7 +28,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="450"/>
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Background="#000000" Margin="12" CornerRadius="4"

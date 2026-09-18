@@ -31,6 +31,8 @@ public class MainViewModel : ViewModelBase
     private double _previewContainerWidth = 640;
     private double _previewContainerHeight = 360;
     private string _captureSourceName = "선택 안 됨";
+    private DateTime _lastPreviewUpdate = DateTime.MinValue;
+    private readonly TimeSpan _previewThrottleInterval = TimeSpan.FromMilliseconds(33); // ~30 fps cap
 
     public ObservableCollection<AudioSessionViewModel> AudioSessions { get; } = new();
 
@@ -144,6 +146,12 @@ public class MainViewModel : ViewModelBase
     {
         _recordingService.WriteFrame(frame);
 
+        var now = DateTime.UtcNow;
+        if (now - _lastPreviewUpdate < _previewThrottleInterval)
+            return;
+
+        _lastPreviewUpdate = now;
+
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
             var wb = new WriteableBitmap(frame.Width, frame.Height, 96, 96, PixelFormats.Bgra32, null);
@@ -157,7 +165,7 @@ public class MainViewModel : ViewModelBase
             PreviewWidth = frame.Width;
             PreviewHeight = frame.Height;
             UpdatePreviewContainerHeight();
-        });
+        }, DispatcherPriority.Render);
     }
 
     public void SetCaptureSource(GraphicsCaptureItem item)
