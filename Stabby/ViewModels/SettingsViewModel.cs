@@ -1,4 +1,6 @@
+using Stabby.Models;
 using Stabby.Services;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Input;
 
@@ -12,6 +14,7 @@ public class SettingsViewModel : ViewModelBase
     private int _frameRate;
     private int _videoCrf;
     private int _audioBitrate;
+    private VideoEncoder _selectedEncoder;
 
     public string OutputDirectory
     {
@@ -37,6 +40,15 @@ public class SettingsViewModel : ViewModelBase
         set => SetProperty(ref _audioBitrate, value);
     }
 
+    public IReadOnlyList<VideoEncoder> AvailableEncoders { get; } =
+        Enum.GetValues<VideoEncoder>();
+
+    public VideoEncoder SelectedEncoder
+    {
+        get => _selectedEncoder;
+        set => SetProperty(ref _selectedEncoder, value);
+    }
+
     public ICommand SaveCommand { get; }
 
     public SettingsViewModel(SettingsService settingsService, Window window)
@@ -48,6 +60,7 @@ public class SettingsViewModel : ViewModelBase
         FrameRate = s.FrameRate;
         VideoCrf = s.VideoCrf;
         AudioBitrate = s.AudioBitrate;
+        SelectedEncoder = s.VideoEncoder;
         SaveCommand = new RelayCommand(Save);
     }
 
@@ -58,6 +71,7 @@ public class SettingsViewModel : ViewModelBase
         s.FrameRate = FrameRate;
         s.VideoCrf = VideoCrf;
         s.AudioBitrate = AudioBitrate;
+        s.VideoEncoder = SelectedEncoder;
         _settingsService.Save();
         _window.Close();
     }

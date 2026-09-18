@@ -6,4 +6,5 @@ public class Settings
     public int FrameRate { get; set; } = 30;
     public int VideoCrf { get; set; } = 23;
     public int AudioBitrate { get; set; } = 128;
+    public VideoEncoder VideoEncoder { get; set; } = VideoEncoder.H264;
 }

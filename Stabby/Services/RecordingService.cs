@@ -24,6 +24,7 @@ public class RecordingService
     private int _frameRate = 30;
     private int _videoCrf = 23;
     private int _audioBitrate = 128;
+    private VideoEncoder _videoEncoder = VideoEncoder.H264;
 
     public bool IsRecording => _ffmpegProcess != null && !_ffmpegProcess.HasExited;
     public bool IsPaused => _isPaused;
@@ -40,6 +41,7 @@ public class RecordingService
         _frameRate = settings.FrameRate;
         _videoCrf = settings.VideoCrf;
         _audioBitrate = settings.AudioBitrate;
+        _videoEncoder = settings.VideoEncoder;
         _isPaused = false;
 
         var tempDir = Path.GetTempPath();
@@ -112,10 +114,18 @@ public class RecordingService
 
     private void StartVideoCapture(string outputPath, int width, int height)
     {
+        var videoArgs = _videoEncoder switch
+        {
+            VideoEncoder.H264_NVENC => $"-c:v h264_nvenc -preset p4 -cq {_videoCrf} -pix_fmt yuv420p",
+            VideoEncoder.H264_QSV => $"-c:v h264_qsv -preset medium -global_quality {_videoCrf} -pix_fmt yuv420p",
+            VideoEncoder.H264_AMF => $"-c:v h264_amf -quality balanced -qp_i {_videoCrf} -qp_p {_videoCrf} -pix_fmt yuv420p",
+            _ => $"-c:v libx264 -preset fast -crf {_videoCrf} -pix_fmt yuv420p"
+        };
+
         var psi = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-f rawvideo -pix_fmt bgra -s {width}x{height} -r {_frameRate} -thread_queue_size 512 -i - -c:v libx264 -preset fast -crf {_videoCrf} -pix_fmt yuv420p -y \"{outputPath}\"",
+            Arguments = $"-f rawvideo -pix_fmt bgra -s {width}x{height} -r {_frameRate} -thread_queue_size 512 -i - {videoArgs} -y \"{outputPath}\"",
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardError = true,
