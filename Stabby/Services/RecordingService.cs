@@ -31,6 +31,7 @@ public class RecordingService
     public bool IsRecording => _ffmpegProcess != null && !_ffmpegProcess.HasExited;
     public bool IsPaused => _isPaused;
     public string? OutputPath => _outputPath;
+    public string? LastError { get; private set; }
 
     public void StartRecording(
         string outputPath,

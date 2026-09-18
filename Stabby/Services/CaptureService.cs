@@ -62,27 +62,34 @@ public class CaptureService : IDisposable
 
     private async void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
     {
-        using var frame = sender.TryGetNextFrame();
-        if (frame == null) return;
-
-        var size = frame.ContentSize;
-        if (size.Width != _lastSize.Width || size.Height != _lastSize.Height)
+        try
         {
-            _lastSize = size;
-            if (_framePool != null && _device != null)
+            using var frame = sender.TryGetNextFrame();
+            if (frame == null) return;
+
+            var size = frame.ContentSize;
+            if (size.Width != _lastSize.Width || size.Height != _lastSize.Height)
             {
-                _framePool.Recreate(_device, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, size);
+                _lastSize = size;
+                if (_framePool != null && _device != null)
+                {
+                    _framePool.Recreate(_device, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, size);
+                }
             }
+
+            var softwareBitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface).AsTask();
+            using var converted = SoftwareBitmap.Convert(softwareBitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+            softwareBitmap.Dispose();
+
+            var bytes = new byte[size.Width * size.Height * 4];
+            converted.CopyToBuffer(bytes.AsBuffer());
+
+            FrameReady?.Invoke(this, new CapturedFrame(bytes, size.Width, size.Height));
         }
-
-        var softwareBitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface).AsTask();
-        using var converted = SoftwareBitmap.Convert(softwareBitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
-        softwareBitmap.Dispose();
-
-        var bytes = new byte[size.Width * size.Height * 4];
-        converted.CopyToBuffer(bytes.AsBuffer());
-
-        FrameReady?.Invoke(this, new CapturedFrame(bytes, size.Width, size.Height));
+        catch
+        {
+            // Frame processing errors are ignored to avoid crashing the capture loop.
+        }
     }
 
     public void Dispose()
