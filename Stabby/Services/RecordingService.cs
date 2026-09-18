@@ -21,6 +21,7 @@ public class RecordingService
     private string? _outputPath;
     private readonly object _ffmpegLock = new object();
     private bool _isPaused;
+    private bool _stopRequested;
     private int _frameRate = 30;
     private int _videoCrf = 23;
     private int _audioBitrate = 128;
@@ -44,6 +45,7 @@ public class RecordingService
         _audioBitrate = settings.AudioBitrate;
         _videoEncoder = settings.VideoEncoder;
         _isPaused = false;
+        _stopRequested = false;
 
         var tempDir = Path.GetTempPath();
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
@@ -96,10 +98,11 @@ public class RecordingService
 
     public void WriteFrame(CapturedFrame frame)
     {
-        if (_isPaused) return;
+        if (_isPaused || _stopRequested) return;
 
         lock (_ffmpegLock)
         {
+            if (_stopRequested) return;
             if (_ffmpegProcess == null)
             {
                 StartVideoCapture(_videoTempPath!, frame.Width, frame.Height);
@@ -175,6 +178,11 @@ public class RecordingService
 
     public async Task StopRecordingAsync()
     {
+        _stopRequested = true;
+
+        // Stop the frame source first so WriteFrame stops pumping frames.
+        _captureService?.StopCapture();
+
         if (_systemAudioCapture != null)
         {
             _audioStoppedTcs = new TaskCompletionSource();
@@ -190,11 +198,14 @@ public class RecordingService
 
         if (_ffmpegProcess != null)
         {
-            try
+            lock (_ffmpegLock)
             {
-                _ffmpegProcess.StandardInput.Close();
+                try
+                {
+                    _ffmpegProcess.StandardInput.Close();
+                }
+                catch { }
             }
-            catch { }
             await _ffmpegProcess.WaitForExitAsync();
         }
 
@@ -271,5 +282,6 @@ public class RecordingService
         _systemAudioCapture = null;
         _captureService = null;
         _isPaused = false;
+        _stopRequested = false;
     }
 }
