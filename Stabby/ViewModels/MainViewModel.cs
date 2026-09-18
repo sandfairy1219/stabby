@@ -136,7 +136,11 @@ public class MainViewModel : ViewModelBase
         {
             Interval = TimeSpan.FromSeconds(1)
         };
-        _refreshTimer.Tick += (s, e) => RefreshAudioSessions();
+        _refreshTimer.Tick += (s, e) =>
+        {
+            RefreshAudioSessions();
+            UpdateCaptureStats();
+        };
         _refreshTimer.Start();
 
         RefreshAudioSessions();
@@ -292,6 +296,24 @@ public class MainViewModel : ViewModelBase
                 vm.PropertyChanged += OnAudioSessionPropertyChanged;
                 AudioSessions.Add(vm);
             }
+        }
+    }
+
+    private void UpdateCaptureStats()
+    {
+        if (IsRecording) return;
+
+        var captured = _captureService.FrameCount;
+        var written = _recordingService.FramesWritten;
+        var captureError = _captureService.LastError;
+
+        if (!string.IsNullOrEmpty(captureError))
+        {
+            StatusMessage = $"Capture error: {captureError}";
+        }
+        else if (captured > 0 || written > 0)
+        {
+            StatusMessage = $"Frames: captured {captured}, written {written}";
         }
     }
 

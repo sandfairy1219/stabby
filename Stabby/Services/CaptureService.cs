@@ -17,14 +17,19 @@ public class CaptureService : IDisposable
     private GraphicsCaptureSession? _session;
     private IDirect3DDevice? _device;
     private SizeInt32 _lastSize;
+    private int _frameCount;
 
     public event EventHandler<CapturedFrame>? FrameReady;
+    public int FrameCount => _frameCount;
+    public string? LastError { get; private set; }
 
     public void StartCapture(GraphicsCaptureItem item)
     {
         try
         {
             StopCapture();
+            _frameCount = 0;
+            LastError = null;
             _item = item;
             _lastSize = item.Size;
             _device = Direct3DDeviceHelper.CreateDevice();
@@ -77,18 +82,19 @@ public class CaptureService : IDisposable
                 }
             }
 
-            var softwareBitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface).AsTask();
+            var softwareBitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface).AsTask().ConfigureAwait(false);
             using var converted = SoftwareBitmap.Convert(softwareBitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
             softwareBitmap.Dispose();
 
             var bytes = new byte[size.Width * size.Height * 4];
             converted.CopyToBuffer(bytes.AsBuffer());
 
+            _frameCount++;
             FrameReady?.Invoke(this, new CapturedFrame(bytes, size.Width, size.Height));
         }
-        catch
+        catch (Exception ex)
         {
-            // Frame processing errors are ignored to avoid crashing the capture loop.
+            LastError = ex.Message;
         }
     }
 

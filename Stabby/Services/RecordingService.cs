@@ -32,6 +32,7 @@ public class RecordingService
     public bool IsPaused => _isPaused;
     public string? OutputPath => _outputPath;
     public string? LastError { get; private set; }
+    public int FramesWritten { get; private set; }
 
     public void StartRecording(
         string outputPath,
@@ -115,6 +116,7 @@ public class RecordingService
             try
             {
                 _ffmpegProcess?.StandardInput.BaseStream.Write(frame.Data);
+                FramesWritten++;
             }
             catch { }
         }
@@ -316,5 +318,6 @@ public class RecordingService
         _captureService = null;
         _isPaused = false;
         _stopRequested = false;
+        FramesWritten = 0;
     }
 }
