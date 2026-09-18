@@ -28,6 +28,7 @@ public class RecordingService
 
     public bool IsRecording => _ffmpegProcess != null && !_ffmpegProcess.HasExited;
     public bool IsPaused => _isPaused;
+    public string? OutputPath => _outputPath;
 
     public void StartRecording(
         string outputPath,
@@ -128,7 +129,7 @@ public class RecordingService
             Arguments = $"-f rawvideo -pix_fmt bgra -s {width}x{height} -r {_frameRate} -thread_queue_size 512 -i - {videoArgs} -y \"{outputPath}\"",
             UseShellExecute = false,
             RedirectStandardInput = true,
-            RedirectStandardError = true,
+            RedirectStandardError = false,
             CreateNoWindow = true
         };
         _ffmpegProcess = Process.Start(psi);
@@ -239,7 +240,7 @@ public class RecordingService
             FileName = "ffmpeg",
             Arguments = sb.ToString(),
             UseShellExecute = false,
-            RedirectStandardError = true,
+            RedirectStandardError = false,
             CreateNoWindow = true
         };
         using var process = Process.Start(psi);

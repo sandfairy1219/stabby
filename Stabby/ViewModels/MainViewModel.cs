@@ -240,11 +240,13 @@ public class MainViewModel : ViewModelBase
 
     private async Task StopRecordingAsync()
     {
-        StatusMessage = "Finalizing...";
+        var outputPath = _recordingService.OutputPath;
+        var fileName = outputPath != null ? Path.GetFileName(outputPath) : "unknown";
+        StatusMessage = $"Finalizing... ({fileName})";
         await _recordingService.StopRecordingAsync();
         IsRecording = false;
         IsPaused = false;
-        StatusMessage = "Saved";
+        StatusMessage = $"Saved: {fileName}";
     }
 
     private void RefreshAudioSessions()
