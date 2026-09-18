@@ -14,6 +14,7 @@ public class RecordingService
     private readonly List<AudioSessionViewModel> _audioSessions = new();
     private CaptureService? _captureService;
     private Process? _ffmpegProcess;
+    private StringBuilder? _ffmpegError;
     private WasapiLoopbackCapture? _systemAudioCapture;
     private WaveFileWriter? _systemAudioWriter;
     private TaskCompletionSource? _audioStoppedTcs;
@@ -128,7 +129,11 @@ public class RecordingService
             }
             catch (Exception ex)
             {
-                LastError = $"Failed to write frame: {ex.Message}";
+                var processInfo = _ffmpegProcess != null
+                    ? $" exited={_ffmpegProcess.HasExited} exitCode={_ffmpegProcess.ExitCode}"
+                    : " process=null";
+                var stderr = _ffmpegError?.ToString() ?? "";
+                LastError = $"Failed to write frame: {ex.Message}{processInfo}\nFFmpeg stderr:\n{stderr}";
             }
         }
     }
@@ -160,11 +165,11 @@ public class RecordingService
             return;
         }
 
-        var errorBuilder = new StringBuilder();
+        _ffmpegError = new StringBuilder();
         _ffmpegProcess.ErrorDataReceived += (s, e) =>
         {
             if (!string.IsNullOrEmpty(e.Data))
-                errorBuilder.AppendLine(e.Data);
+                _ffmpegError.AppendLine(e.Data);
         };
         _ffmpegProcess.BeginErrorReadLine();
 
@@ -172,7 +177,7 @@ public class RecordingService
         _ffmpegProcess.WaitForExit(500);
         if (_ffmpegProcess.HasExited && _ffmpegProcess.ExitCode != 0)
         {
-            LastError = $"FFmpeg exited immediately. Args: {arguments}\nError: {errorBuilder}";
+            LastError = $"FFmpeg exited immediately. Args: {arguments}\nError: {_ffmpegError}";
             _ffmpegProcess = null;
         }
     }
