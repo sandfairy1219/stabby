@@ -244,9 +244,6 @@ public class MainViewModel : ViewModelBase
         var fileName = outputPath != null ? Path.GetFileName(outputPath) : "unknown";
         StatusMessage = $"Finalizing... ({fileName})";
 
-        // Stop frame capture immediately so FFmpeg can finish.
-        _captureService.StopCapture();
-
         try
         {
             await _recordingService.StopRecordingAsync();

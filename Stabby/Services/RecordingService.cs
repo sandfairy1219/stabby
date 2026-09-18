@@ -184,9 +184,6 @@ public class RecordingService
     {
         _stopRequested = true;
 
-        // Stop the frame source first so WriteFrame stops pumping frames.
-        _captureService?.StopCapture();
-
         if (_systemAudioCapture != null)
         {
             _audioStoppedTcs = new TaskCompletionSource();
@@ -199,6 +196,10 @@ public class RecordingService
             AudioCaptureNative.PacStopCapture(handle);
         }
         _captureHandles.Clear();
+
+        // Stop frame source after audio capture has finished so any frames
+        // already in flight are written to FFmpeg before we close the pipe.
+        _captureService?.StopCapture();
 
         if (_ffmpegProcess != null)
         {
@@ -222,6 +223,12 @@ public class RecordingService
         try
         {
             if (_videoTempPath == null || _outputPath == null) return;
+
+            if (!File.Exists(_videoTempPath))
+            {
+                LastError = "No video frames were captured.";
+                return;
+            }
 
             var audioPaths = new List<string>();
             if (!string.IsNullOrEmpty(_systemAudioTempPath) && File.Exists(_systemAudioTempPath))
