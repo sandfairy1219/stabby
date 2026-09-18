@@ -143,16 +143,38 @@ public class RecordingService
             _ => $"-c:v libx264 -preset fast -crf {_videoCrf} -pix_fmt yuv420p"
         };
 
+        var arguments = $"-f rawvideo -pix_fmt bgra -s {width}x{height} -r {_frameRate} -thread_queue_size 512 -i - {videoArgs} -y \"{outputPath}\"";
         var psi = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-f rawvideo -pix_fmt bgra -s {width}x{height} -r {_frameRate} -thread_queue_size 512 -i - {videoArgs} -y \"{outputPath}\"",
+            Arguments = arguments,
             UseShellExecute = false,
             RedirectStandardInput = true,
-            RedirectStandardError = false,
+            RedirectStandardError = true,
             CreateNoWindow = true
         };
         _ffmpegProcess = Process.Start(psi);
+        if (_ffmpegProcess == null)
+        {
+            LastError = "FFmpeg process could not be started.";
+            return;
+        }
+
+        var errorBuilder = new StringBuilder();
+        _ffmpegProcess.ErrorDataReceived += (s, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data))
+                errorBuilder.AppendLine(e.Data);
+        };
+        _ffmpegProcess.BeginErrorReadLine();
+
+        // Give FFmpeg a moment to fail on bad arguments/encoder, then capture the error.
+        _ffmpegProcess.WaitForExit(500);
+        if (_ffmpegProcess.HasExited && _ffmpegProcess.ExitCode != 0)
+        {
+            LastError = $"FFmpeg exited immediately. Args: {arguments}\nError: {errorBuilder}";
+            _ffmpegProcess = null;
+        }
     }
 
     private void StartSystemAudioCapture(string outputPath)
